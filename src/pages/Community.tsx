@@ -951,20 +951,45 @@ function PostModal({ open, onClose, onSubmit, activities, user }: PostModalProps
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const MOCK_IMAGES = [
-    'https://picsum.photos/seed/cmty-1/600/400',
-    'https://picsum.photos/seed/cmty-2/600/400',
-    'https://picsum.photos/seed/cmty-3/600/400',
-  ];
-
-  const handleAddImages = () => {
+  const processFiles = async (files: FileList | File[]) => {
     const remainingSlots = 9 - images.length;
-    const count = Math.min(
-      remainingSlots,
-      Math.floor(Math.random() * 3) + 1
+    if (remainingSlots <= 0) return;
+
+    const fileArray = Array.from(files).filter(
+      (f) => f.type.startsWith('image/')
     );
-    const newImgs = MOCK_IMAGES.slice(0, count);
-    setImages((prev) => [...prev, ...newImgs]);
+    const limitedFiles = fileArray.slice(0, remainingSlots);
+
+    const promises = limitedFiles.map(
+      (file) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        })
+    );
+
+    try {
+      const dataUrls = await Promise.all(promises);
+      setImages((prev) => [...prev, ...dataUrls]);
+    } catch (err) {
+      console.error('Failed to read files:', err);
+    }
+  };
+
+  const handleAddImages = (
+    e?: React.ChangeEvent<HTMLInputElement> | React.MouseEvent
+  ) => {
+    if (e && 'target' in e && e.target instanceof HTMLInputElement) {
+      const selectedFiles = e.target.files;
+      if (selectedFiles && selectedFiles.length > 0) {
+        processFiles(selectedFiles);
+      }
+      e.target.value = '';
+      return;
+    }
+    fileInputRef.current?.click();
   };
 
   const handleRemoveImage = (idx: number) => {
@@ -1104,7 +1129,10 @@ function PostModal({ open, onClose, onSubmit, activities, user }: PostModalProps
                   onDrop={(e) => {
                     e.preventDefault();
                     setIsDragging(false);
-                    handleAddImages();
+                    const dropFiles = e.dataTransfer.files;
+                    if (dropFiles && dropFiles.length > 0) {
+                      processFiles(dropFiles);
+                    }
                   }}
                   onClick={() => fileInputRef.current?.click()}
                   className={cn(

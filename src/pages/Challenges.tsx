@@ -32,7 +32,7 @@ import {
 import useStore from '@/store/useStore';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/utils/formatters';
-import type { Challenge, ChallengeType, ChallengeParticipant } from '@/types';
+import type { Challenge, ChallengeType, ChallengeParticipant, User } from '@/types';
 
 type TabFilter = 'all' | 'ongoing' | 'upcoming' | 'completed' | 'joined';
 type TypeFilter = 'all' | ChallengeType;
@@ -89,7 +89,7 @@ function getEstimatedCompletionTime(
 }
 
 export default function Challenges() {
-  const { challenges, user, joinChallenge } = useStore();
+  const { challenges, user, joinChallenge, addChallenge } = useStore();
 
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -451,7 +451,13 @@ export default function Challenges() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showCreateModal && <CreateChallengeModal onClose={() => setShowCreateModal(false)} />}
+        {showCreateModal && (
+          <CreateChallengeModal
+            onClose={() => setShowCreateModal(false)}
+            onCreate={addChallenge}
+            user={user}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -1526,7 +1532,15 @@ function ActivityWall({
   );
 }
 
-function CreateChallengeModal({ onClose }: { onClose: () => void }) {
+function CreateChallengeModal({
+  onClose,
+  onCreate,
+  user,
+}: {
+  onClose: () => void;
+  onCreate: (challenge: Challenge) => void;
+  user: User;
+}) {
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -1747,12 +1761,60 @@ function CreateChallengeModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={() => {
+              if (!form.title.trim()) {
+                alert('请输入挑战标题');
+                return;
+              }
+              if (!form.target.trim()) {
+                alert('请输入目标值');
+                return;
+              }
+              if (!form.startDate) {
+                alert('请选择开始日期');
+                return;
+              }
+              if (!form.endDate) {
+                alert('请选择结束日期');
+                return;
+              }
+
+              const newChallenge: Challenge = {
+                id: `chal-${Date.now()}`,
+                title: form.title,
+                description: form.description,
+                type: form.type,
+                unit: form.unit,
+                target: Number(form.target),
+                startDate: `${form.startDate}T00:00:00.000Z`,
+                endDate: `${form.endDate}T23:59:59.000Z`,
+                participantCount: 1,
+                isJoined: true,
+                banner: `https://picsum.photos/seed/${Date.now()}/1200/400`,
+                reward: `${form.rewardBadge} 完成挑战奖励`,
+                rules: [
+                  '按照挑战类型要求完成每日目标',
+                  '坚持打卡，记录真实运动数据',
+                  '尊重其他参与者，公平竞争'
+                ],
+                participants: [
+                  {
+                    userId: user.id,
+                    user: user,
+                    progress: 0,
+                    currentValue: 0,
+                    joinedAt: new Date().toISOString(),
+                    rank: 1
+                  }
+                ]
+              };
+
+              onCreate(newChallenge);
               onClose();
             }}
             className="flex-[2] py-3 rounded-xl bg-brand-gradient text-white font-bold text-sm shadow-lg shadow-brand-500/30 hover:shadow-brand-500/50 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
-            创建挑战 (演示)
+            创建挑战
           </button>
         </div>
       </motion.div>

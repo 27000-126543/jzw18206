@@ -36,6 +36,7 @@ interface StoreState {
   toggleFavoriteRoute: (routeId: string) => void;
   getFavoriteRoutes: () => Route[];
 
+  addChallenge: (challenge: Challenge) => void;
   joinChallenge: (challengeId: string) => void;
   leaveChallenge: (challengeId: string) => void;
 
@@ -92,6 +93,11 @@ const useStore = create<StoreState>((set, get) => ({
     })),
 
   getFavoriteRoutes: () => get().routes.filter((route) => route.isFavorite),
+
+  addChallenge: (challenge) =>
+    set((state) => ({
+      challenges: [challenge, ...state.challenges]
+    })),
 
   joinChallenge: (challengeId) =>
     set((state) => {
