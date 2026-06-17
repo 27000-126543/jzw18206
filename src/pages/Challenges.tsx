@@ -652,7 +652,7 @@ function ChallengeCard({
           <div className="text-center p-2.5 rounded-xl bg-ink-50">
             <Users className="w-3.5 h-3.5 text-ink-400 mx-auto mb-1" />
             <p className="text-sm font-bold text-ink-800">
-              {(challenge.participantCount / 1000).toFixed(1)}k
+              {challenge.participants.length}
             </p>
             <p className="text-[10px] text-ink-400">参与人数</p>
           </div>
@@ -687,10 +687,10 @@ function ChallengeCard({
                   title={p.user.name}
                 />
               ))}
-              {challenge.participantCount > 5 && (
+              {challenge.participants.length > 5 && (
                 <div className="w-7 h-7 rounded-full border-2 border-white bg-gradient-to-br from-ink-200 to-ink-300 flex items-center justify-center">
                   <span className="text-[10px] font-bold text-ink-600">
-                    +{(challenge.participantCount - 5) > 99 ? '99+' : challenge.participantCount - 5}
+                    +{(challenge.participants.length - 5) > 99 ? '99+' : challenge.participants.length - 5}
                   </span>
                 </div>
               )}
@@ -767,36 +767,76 @@ function DetailModal({
   const top3 = sortedParticipants.slice(0, 3);
   const rest = sortedParticipants.slice(3);
 
-  const activities = [
-    {
-      id: '1',
-      user: challenge.participants[0]?.user,
-      action: '达成了 50% 里程碑',
-      time: '2小时前',
-      milestone: '50%',
-    },
-    {
-      id: '2',
-      user: challenge.participants[1]?.user,
-      action: '加入挑战',
-      time: '5小时前',
-      milestone: null,
-    },
-    {
-      id: '3',
-      user: challenge.participants[2]?.user,
-      action: '完成了今日打卡',
-      time: '今天早上',
-      milestone: null,
-    },
-    {
-      id: '4',
-      user: challenge.participants[3]?.user,
-      action: '达成了 80% 里程碑',
-      time: '昨天',
-      milestone: '80%',
-    },
-  ];
+  const participantCount = challenge.participants.length;
+
+  const activities = useMemo(() => {
+    const result: {
+      id: string;
+      user: User;
+      action: string;
+      time: string;
+      milestone: string | null;
+    }[] = [];
+
+    const count = Math.min(sortedParticipants.length, 4);
+    if (count === 0) return result;
+
+    const activityTemplates = [
+      { action: '刚刚加入挑战', time: '刚刚', milestone: null },
+      { action: '加入挑战', time: '1小时前', milestone: null },
+      { action: '完成了今日打卡', time: '今天早上', milestone: null },
+      { action: '达成了 30% 里程碑', time: '昨天', milestone: '30%' },
+    ];
+
+    for (let i = 0; i < count; i++) {
+      const participant = sortedParticipants[i];
+      const template = activityTemplates[i];
+
+      let action = template.action;
+      let milestone = template.milestone;
+      let time = template.time;
+
+      if (i === 0) {
+        action = '刚刚加入挑战';
+        milestone = null;
+        time = '刚刚';
+      } else if (i === 1) {
+        action = '加入挑战';
+        milestone = null;
+        time = '1小时前';
+      } else if (i === 2) {
+        action = '完成了今日打卡';
+        milestone = null;
+        time = '今天早上';
+      } else if (i === 3) {
+        const progress = participant.progress;
+        if (progress >= 80) {
+          action = '达成了 80% 里程碑';
+          milestone = '80%';
+        } else if (progress >= 50) {
+          action = '达成了 50% 里程碑';
+          milestone = '50%';
+        } else if (progress >= 30) {
+          action = '达成了 30% 里程碑';
+          milestone = '30%';
+        } else {
+          action = '完成了今日打卡';
+          milestone = null;
+        }
+        time = '昨天';
+      }
+
+      result.push({
+        id: `act-${i}`,
+        user: participant.user,
+        action,
+        time,
+        milestone,
+      });
+    }
+
+    return result;
+  }, [sortedParticipants]);
 
   return (
     <motion.div
@@ -879,7 +919,7 @@ function DetailModal({
         <div className="p-6 sm:p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <InfoSection challenge={challenge} gradient={gradient} daysLeft={daysLeft} />
+              <InfoSection challenge={challenge} gradient={gradient} daysLeft={daysLeft} participantCount={participantCount} />
               <LeaderboardSection
                 top3={top3}
                 rest={rest}
@@ -917,10 +957,12 @@ function InfoSection({
   challenge,
   gradient,
   daysLeft,
+  participantCount,
 }: {
   challenge: Challenge;
   gradient: { bg: string; text: string; label: string };
   daysLeft: number;
+  participantCount: number;
 }) {
   return (
     <motion.div
@@ -929,7 +971,7 @@ function InfoSection({
       transition={{ duration: 0.4, delay: 0.1 }}
       className="space-y-5"
     >
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-4 rounded-2xl bg-ink-50 text-center">
           <Calendar className={cn('w-5 h-5 mx-auto mb-1.5', gradient.text)} />
           <p className="text-xs text-ink-400 mb-1">开始</p>
@@ -942,6 +984,13 @@ function InfoSection({
           <p className="text-xs text-ink-400 mb-1">结束</p>
           <p className="text-sm font-bold text-ink-800">
             {formatDate(challenge.endDate, 'MM月dd日')}
+          </p>
+        </div>
+        <div className="p-4 rounded-2xl bg-ink-50 text-center">
+          <Users className={cn('w-5 h-5 mx-auto mb-1.5', gradient.text)} />
+          <p className="text-xs text-ink-400 mb-1">参与人数</p>
+          <p className="text-sm font-bold text-ink-800">
+            {participantCount}
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-gradient-to-br from-brand-50 to-amber-50 text-center border border-brand-100">
@@ -1482,7 +1531,7 @@ function ActivityWall({
 }: {
   activities: {
     id: string;
-    user?: { name: string; avatar: string };
+    user: User;
     action: string;
     time: string;
     milestone: string | null;
@@ -1499,35 +1548,43 @@ function ActivityWall({
         <Sparkles className="w-4 h-4 text-amber-500" />
         参与者动态
       </h4>
-      <div className="space-y-2">
-        {activities.map((act, i) => (
-          <motion.div
-            key={act.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: 0.35 + i * 0.06 }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-ink-50 hover:bg-ink-100/70 transition-colors"
-          >
-            <img
-              src={act.user?.avatar}
-              alt={act.user?.name}
-              className="w-9 h-9 rounded-full object-cover ring-2 ring-white"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-ink-700 leading-tight">
-                <span className="font-semibold text-ink-800">{act.user?.name}</span>{' '}
-                <span className="text-ink-500">{act.action}</span>
-              </p>
-              <p className="text-[11px] text-ink-400 mt-0.5">{act.time}</p>
-            </div>
-            {act.milestone && (
-              <span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold shadow-sm">
-                {act.milestone}
-              </span>
-            )}
-          </motion.div>
-        ))}
-      </div>
+      {activities.length === 0 ? (
+        <div className="text-center py-8 px-4 rounded-2xl bg-ink-50">
+          <Sparkles className="w-10 h-10 text-ink-200 mx-auto mb-3" />
+          <p className="text-sm text-ink-500 font-medium">暂无动态</p>
+          <p className="text-xs text-ink-400 mt-1">成为第一个参与者吧！</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {activities.map((act, i) => (
+            <motion.div
+              key={act.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.35 + i * 0.06 }}
+              className="flex items-center gap-3 p-3 rounded-xl bg-ink-50 hover:bg-ink-100/70 transition-colors"
+            >
+              <img
+                src={act.user.avatar}
+                alt={act.user.name}
+                className="w-9 h-9 rounded-full object-cover ring-2 ring-white"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-ink-700 leading-tight">
+                  <span className="font-semibold text-ink-800">{act.user.name}</span>{' '}
+                  <span className="text-ink-500">{act.action}</span>
+                </p>
+                <p className="text-[11px] text-ink-400 mt-0.5">{act.time}</p>
+              </div>
+              {act.milestone && (
+                <span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold shadow-sm">
+                  {act.milestone}
+                </span>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -461,16 +461,17 @@ function ShareToCommunityModal({ open, onClose, activity, user, onPublish }: Sha
                       <p className="text-xs text-ink-400 mt-1">
                         支持 JPG/PNG，最多 9 张
                       </p>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleAddImages}
-                      />
                     </div>
                   )}
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleAddImages}
+                  />
 
                   <div className="space-y-2.5">
                     <div className="flex items-center gap-2">

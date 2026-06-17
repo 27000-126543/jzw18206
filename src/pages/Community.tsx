@@ -1159,16 +1159,17 @@ function PostModal({ open, onClose, onSubmit, activities, user }: PostModalProps
                   <p className="text-xs text-ink-400 mt-1">
                     支持 JPG/PNG，最多 9 张
                   </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={handleAddImages}
-                  />
                 </div>
               )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleAddImages}
+              />
 
               <div className="relative">
                 <button
