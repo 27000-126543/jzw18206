@@ -106,7 +106,7 @@ export default function Challenges() {
     const now = new Date();
     const ongoing = challenges.filter((c) => getChallengeStatus(c) === 'ongoing');
     const completed = challenges.filter((c) => getChallengeStatus(c) === 'completed');
-    const totalParticipants = challenges.reduce((sum, c) => sum + c.participantCount, 0);
+    const totalParticipants = challenges.reduce((sum, c) => sum + c.participants.length, 0);
     const joined = challenges.filter((c) => c.isJoined || c.participants.some((p) => p.userId === user.id));
     return {
       ongoing: ongoing.length,
@@ -593,6 +593,7 @@ function ChallengeCard({
   const progress = myParticipant?.progress ?? challenge.myProgress ?? 0;
   const currentValue = myParticipant?.currentValue ?? challenge.myCurrentValue ?? 0;
   const myRank = myParticipant?.rank;
+  const isJoined = !!myParticipant || challenge.isJoined;
   const isCompleted = status === 'completed';
   const isOngoing = status === 'ongoing';
 
@@ -638,7 +639,7 @@ function ChallengeCard({
               {gradient.icon}
               {gradient.label}
             </span>
-            {challenge.isJoined && (
+            {isJoined && (
               <span className="px-2.5 py-1 rounded-lg text-xs font-bold text-brand-700 bg-white/90 backdrop-blur-sm flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" />
                 已参与
@@ -725,7 +726,7 @@ function ChallengeCard({
           </div>
         </div>
 
-        {challenge.isJoined && myRank && (
+        {isJoined && myRank && (
           <div className="p-3 rounded-xl bg-gradient-to-r from-brand-50 to-amber-50 border border-brand-100">
             <div className="flex items-center justify-between text-sm">
               <span className="flex items-center gap-1.5 text-brand-700 font-medium">
@@ -790,7 +791,7 @@ function ChallengeCard({
               <Award className="w-4 h-4" />
               已完成
             </div>
-          ) : challenge.isJoined ? (
+          ) : isJoined ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -848,6 +849,7 @@ function DetailModal({
   const myProgress = myParticipant?.progress ?? latestChallenge.myProgress ?? 0;
   const myCurrentValue = myParticipant?.currentValue ?? latestChallenge.myCurrentValue ?? 0;
   const myRank = myParticipant?.rank;
+  const isJoined = !!myParticipant || latestChallenge.isJoined;
   const startDate = new Date(latestChallenge.startDate);
   const now = new Date();
   const daysPassed = Math.max(
@@ -1029,7 +1031,7 @@ function DetailModal({
 
             <div className="space-y-6">
               <MyProgressCard
-                isJoined={!!latestChallenge.isJoined}
+                isJoined={isJoined}
                 myProgress={myProgress}
                 myCurrentValue={myCurrentValue}
                 target={latestChallenge.target}
@@ -1041,10 +1043,12 @@ function DetailModal({
                 onJoin={onJoin}
               />
               <CheckInCard
-                isJoined={!!latestChallenge.isJoined}
+                isJoined={isJoined}
                 challengeType={latestChallenge.type}
                 challengeId={latestChallenge.id}
                 activities={activities}
+                target={latestChallenge.target}
+                currentValue={myCurrentValue}
                 onSubmitActivity={onSubmitActivity}
                 onSubmitSuccess={(msg) => {
                   setSubmitSuccess(msg);
@@ -1436,6 +1440,8 @@ function CheckInCard({
   challengeType,
   challengeId,
   activities,
+  target,
+  currentValue,
   onSubmitActivity,
   onSubmitSuccess,
 }: {
@@ -1443,6 +1449,8 @@ function CheckInCard({
   challengeType: ChallengeType;
   challengeId: string;
   activities: Activity[];
+  target: number;
+  currentValue?: number;
   onSubmitActivity: (challengeId: string, activityId: string) => void;
   onSubmitSuccess: (msg: string) => void;
 }) {
@@ -1452,7 +1460,7 @@ function CheckInCard({
     return activities.filter((a) => {
       if (challengeType === 'distance') return a.type === 'running' || a.type === 'cycling';
       if (challengeType === 'streak') return a.type === 'running' || a.type === 'cycling';
-      if (challengeType === 'elevation') return a.type === 'cycling';
+      if (challengeType === 'elevation') return a.type === 'running' || a.type === 'cycling';
       return false;
     });
   }, [activities, challengeType]);
@@ -1476,8 +1484,20 @@ function CheckInCard({
 
   const handleSubmit = (activityId: string, activityName: string, contribution: number) => {
     onSubmitActivity(challengeId, activityId);
-    const unitLabel = challengeType === 'elevation' ? 'm' : 'km';
-    onSubmitSuccess(`打卡成功！提交了 ${contribution.toFixed(1)} ${unitLabel} 运动记录`);
+
+    let message = '';
+    const newCurrentValue = (currentValue ?? 0) + contribution;
+    const newProgress = Math.min(100, (newCurrentValue / target) * 100);
+
+    if (challengeType === 'distance') {
+      message = `打卡成功！新增 ${contribution.toFixed(1)} km，已完成 ${newCurrentValue.toFixed(1)} / ${target.toFixed(1)} km（${newProgress.toFixed(0)}%）`;
+    } else if (challengeType === 'elevation') {
+      message = `打卡成功！新增 ${Math.round(contribution)} m 爬升，已完成 ${Math.round(newCurrentValue)} / ${Math.round(target)} m（${newProgress.toFixed(0)}%）`;
+    } else if (challengeType === 'streak') {
+      message = `打卡成功！今日打卡完成，已连续 ${newCurrentValue} 天`;
+    }
+
+    onSubmitSuccess(message);
     setExpanded(false);
   };
 
