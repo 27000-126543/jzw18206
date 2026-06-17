@@ -39,6 +39,7 @@ interface StoreState {
   addChallenge: (challenge: Challenge) => void;
   joinChallenge: (challengeId: string) => void;
   leaveChallenge: (challengeId: string) => void;
+  submitActivityToChallenge: (challengeId: string, activityId: string) => void;
 
   toggleLikePost: (postId: string) => void;
   toggleBookmarkPost: (postId: string) => void;
@@ -144,6 +145,50 @@ const useStore = create<StoreState>((set, get) => ({
             )
           };
         })
+      };
+    }),
+
+  submitActivityToChallenge: (challengeId, activityId) =>
+    set((state) => {
+      const challenge = state.challenges.find((c) => c.id === challengeId);
+      const activity = state.activities.find((a) => a.id === activityId);
+      if (!challenge || !activity) return state;
+
+      const participantIndex = challenge.participants.findIndex(
+        (p) => p.userId === state.user.id
+      );
+      if (participantIndex === -1) return state;
+
+      let contribution = 0;
+      if (challenge.type === 'distance') {
+        contribution = activity.distance / 1000;
+      } else if (challenge.type === 'elevation') {
+        contribution = activity.elevationGain;
+      } else if (challenge.type === 'streak') {
+        contribution = 1;
+      }
+
+      const updatedParticipants = challenge.participants.map((p, i) => {
+        if (i !== participantIndex) return p;
+        const newCurrentValue = p.currentValue + contribution;
+        const newProgress = Math.min(100, (newCurrentValue / challenge.target) * 100);
+        return { ...p, currentValue: newCurrentValue, progress: newProgress };
+      });
+
+      const sorted = [...updatedParticipants].sort((a, b) => b.currentValue - a.currentValue);
+      const ranked = sorted.map((p, i) => ({ ...p, rank: i + 1 }));
+
+      const updatedChallenge = {
+        ...challenge,
+        participants: ranked,
+        myCurrentValue: ranked.find((p) => p.userId === state.user.id)?.currentValue ?? challenge.myCurrentValue,
+        myProgress: ranked.find((p) => p.userId === state.user.id)?.progress ?? challenge.myProgress,
+      };
+
+      return {
+        challenges: state.challenges.map((c) =>
+          c.id === challengeId ? updatedChallenge : c
+        )
       };
     }),
 

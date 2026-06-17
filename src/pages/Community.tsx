@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -27,12 +28,15 @@ import {
   TrendingUp,
   Users,
   Star,
+  ArrowRight,
+  GripVertical,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import useStore from '../store/useStore';
 import type { Post, User, Comment, Activity } from '../types';
 import { MiniTrackMap } from '../components/maps/MiniTrackMap';
+import { DraggableImageGrid } from '../components/DraggableImageGrid';
 import {
   formatDistance,
   formatDuration,
@@ -160,6 +164,7 @@ interface PostCardProps {
 
 function PostCard({ post, index, onTagClick, activity }: PostCardProps) {
   const { toggleLikePost, toggleBookmarkPost, addComment } = useStore();
+  const navigate = useNavigate();
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState('');
   const [showMore, setShowMore] = useState(false);
@@ -267,7 +272,13 @@ function PostCard({ post, index, onTagClick, activity }: PostCardProps) {
         )}
 
         {activity && (
-          <div className="mb-3 p-3 rounded-2xl bg-gradient-to-br from-teal-50 to-brand-50 border border-teal-100/50">
+          <div
+            className="mb-3 p-3 rounded-2xl bg-gradient-to-br from-teal-50 to-brand-50 border border-teal-100/50 cursor-pointer hover:shadow-md hover:border-teal-200 transition-all relative group"
+            onClick={() => navigate('/activity/' + activity.id)}
+          >
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <ArrowRight className="w-4 h-4 text-teal-400" />
+            </div>
             <MiniTrackMap
               trackPoints={activity.trackPoints}
               width={480}
@@ -297,6 +308,9 @@ function PostCard({ post, index, onTagClick, activity }: PostCardProps) {
                 </span>
               </div>
             </div>
+            <p className="text-xs text-teal-500 mt-2 text-right">
+              点击查看运动详情 →
+            </p>
           </div>
         )}
 
@@ -1083,40 +1097,12 @@ function PostModal({ open, onClose, onSubmit, activities, user }: PostModalProps
               </div>
 
               {images.length > 0 && (
-                <div className="grid grid-cols-3 gap-2">
-                  {images.map((img, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="relative aspect-square rounded-xl overflow-hidden bg-ink-100"
-                    >
-                      <img
-                        src={img}
-                        alt={`upload-${i}`}
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        onClick={() => handleRemoveImage(i)}
-                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </motion.div>
-                  ))}
-                  {images.length < 9 && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      whileHover={{ scale: 1.02 }}
-                      onClick={handleAddImages}
-                      className="aspect-square rounded-xl border-2 border-dashed border-ink-200 hover:border-brand-400 hover:bg-brand-50/50 transition-colors flex flex-col items-center justify-center gap-1.5 text-ink-400 hover:text-brand-500"
-                    >
-                      <Plus className="w-6 h-6" />
-                      <span className="text-xs">添加图片</span>
-                    </motion.button>
-                  )}
-                </div>
+                <DraggableImageGrid
+                  images={images}
+                  onReorder={(newImages) => setImages(newImages)}
+                  onRemove={handleRemoveImage}
+                  onAddImages={images.length < 9 ? handleAddImages : undefined}
+                />
               )}
 
               {images.length === 0 && (

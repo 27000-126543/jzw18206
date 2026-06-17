@@ -65,6 +65,7 @@ import useStore from '../store/useStore';
 import { PaceChart } from '../components/charts/PaceChart';
 import { ElevationChart } from '../components/charts/ElevationChart';
 import { MiniTrackMap } from '../components/maps/MiniTrackMap';
+import { DraggableImageGrid } from '../components/DraggableImageGrid';
 import type {
   Activity,
   TrackPoint,
@@ -413,40 +414,12 @@ function ShareToCommunityModal({ open, onClose, activity, user, onPublish }: Sha
                   </div>
 
                   {images.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {images.map((img, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="relative aspect-square rounded-xl overflow-hidden bg-ink-100 border border-ink-100"
-                        >
-                          <img
-                            src={img}
-                            alt={`upload-${i}`}
-                            className="w-full h-full object-cover"
-                          />
-                          <button
-                            onClick={() => handleRemoveImage(i)}
-                            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </motion.div>
-                      ))}
-                      {images.length < 9 && (
-                        <motion.button
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          whileHover={{ scale: 1.02 }}
-                          onClick={handleAddImages}
-                          className="aspect-square rounded-xl border-2 border-dashed border-ink-200 hover:border-brand-400 hover:bg-brand-50/50 transition-colors flex flex-col items-center justify-center gap-1.5 text-ink-400 hover:text-brand-500"
-                        >
-                          <Plus className="w-6 h-6" />
-                          <span className="text-xs">添加</span>
-                        </motion.button>
-                      )}
-                    </div>
+                    <DraggableImageGrid
+                      images={images}
+                      onReorder={(newImages) => setImages(newImages)}
+                      onRemove={handleRemoveImage}
+                      onAddImages={images.length < 9 ? handleAddImages : undefined}
+                    />
                   )}
 
                   {images.length === 0 && (

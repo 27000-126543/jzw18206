@@ -20,6 +20,7 @@ import {
   CheckCircle,
   Circle,
   ChevronDown,
+  ChevronUp,
   Filter,
   Sparkles,
   Star,
@@ -28,11 +29,13 @@ import {
   Gift,
   Info,
   ArrowRight,
+  Bike,
+  Activity as ActivityIcon,
 } from 'lucide-react';
 import useStore from '@/store/useStore';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/utils/formatters';
-import type { Challenge, ChallengeType, ChallengeParticipant, User } from '@/types';
+import type { Challenge, ChallengeType, ChallengeParticipant, User, Activity } from '@/types';
 
 type TabFilter = 'all' | 'ongoing' | 'upcoming' | 'completed' | 'joined';
 type TypeFilter = 'all' | ChallengeType;
@@ -89,7 +92,7 @@ function getEstimatedCompletionTime(
 }
 
 export default function Challenges() {
-  const { challenges, user, joinChallenge, addChallenge } = useStore();
+  const { challenges, user, joinChallenge, addChallenge, activities, submitActivityToChallenge } = useStore();
 
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -97,20 +100,28 @@ export default function Challenges() {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinedSubFilter, setJoinedSubFilter] = useState<'all' | 'ongoing' | 'completed' | 'ending_soon'>('all');
 
   const stats = useMemo(() => {
     const now = new Date();
     const ongoing = challenges.filter((c) => getChallengeStatus(c) === 'ongoing');
     const completed = challenges.filter((c) => getChallengeStatus(c) === 'completed');
     const totalParticipants = challenges.reduce((sum, c) => sum + c.participantCount, 0);
+    const joined = challenges.filter((c) => c.isJoined || c.participants.some((p) => p.userId === user.id));
     return {
       ongoing: ongoing.length,
       totalParticipants,
       completed: completed.length,
-      myJoined: challenges.filter((c) => c.isJoined).length,
+      myJoined: joined.length,
+      joinedOngoing: joined.filter((c) => getChallengeStatus(c) === 'ongoing').length,
+      joinedCompleted: joined.filter((c) => {
+        const myP = c.participants.find((p) => p.userId === user.id);
+        return getChallengeStatus(c) === 'completed' || (myP && myP.progress >= 100);
+      }).length,
+      joinedEndingSoon: joined.filter((c) => getChallengeStatus(c) === 'ongoing' && getDaysRemaining(c.endDate) <= 3).length,
       _now: now,
     };
-  }, [challenges]);
+  }, [challenges, user.id]);
 
   const filteredChallenges = useMemo(() => {
     let result = [...challenges];
@@ -122,7 +133,18 @@ export default function Challenges() {
     } else if (activeTab === 'completed') {
       result = result.filter((c) => getChallengeStatus(c) === 'completed');
     } else if (activeTab === 'joined') {
-      result = result.filter((c) => c.isJoined);
+      result = result.filter((c) => c.isJoined || c.participants.some((p) => p.userId === user.id));
+
+      if (joinedSubFilter === 'ongoing') {
+        result = result.filter((c) => getChallengeStatus(c) === 'ongoing');
+      } else if (joinedSubFilter === 'completed') {
+        result = result.filter((c) => {
+          const myP = c.participants.find((p) => p.userId === user.id);
+          return getChallengeStatus(c) === 'completed' || (myP && myP.progress >= 100);
+        });
+      } else if (joinedSubFilter === 'ending_soon') {
+        result = result.filter((c) => getChallengeStatus(c) === 'ongoing' && getDaysRemaining(c.endDate) <= 3);
+      }
     }
 
     if (typeFilter !== 'all') {
@@ -139,7 +161,7 @@ export default function Challenges() {
     }
 
     return result;
-  }, [challenges, activeTab, typeFilter, searchQuery]);
+  }, [challenges, activeTab, typeFilter, searchQuery, joinedSubFilter, user.id]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -301,7 +323,10 @@ export default function Challenges() {
                 {tabs.map((tab) => (
                   <button
                     key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      if (tab.key !== 'joined') setJoinedSubFilter('all');
+                    }}
                     className={cn(
                       'relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300',
                       activeTab === tab.key
@@ -396,6 +421,38 @@ export default function Challenges() {
             </div>
           </div>
 
+          {activeTab === 'joined' && (
+            <div className="flex gap-2">
+              {([
+                { key: 'all' as const, label: '全部', count: stats.myJoined },
+                { key: 'ongoing' as const, label: '进行中', count: stats.joinedOngoing },
+                { key: 'completed' as const, label: '已完成', count: stats.joinedCompleted },
+                { key: 'ending_soon' as const, label: '快结束', count: stats.joinedEndingSoon },
+              ]).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setJoinedSubFilter(f.key)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                    joinedSubFilter === f.key
+                      ? 'bg-brand-gradient text-white shadow-md shadow-brand-500/25'
+                      : 'bg-white text-ink-600 border border-ink-200 hover:border-brand-300 hover:text-brand-600'
+                  )}
+                >
+                  {f.label}
+                  {f.count > 0 && (
+                    <span className={cn(
+                      'px-1.5 py-0.5 rounded-full text-[10px] font-bold',
+                      joinedSubFilter === f.key ? 'bg-white/25 text-white' : 'bg-ink-100 text-ink-500'
+                    )}>
+                      {f.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-3 text-xs text-ink-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-orange-500" />
@@ -431,6 +488,7 @@ export default function Challenges() {
                     userId={user.id}
                     onOpenDetail={() => setSelectedChallenge(challenge)}
                     onJoin={() => handleJoin(challenge.id)}
+                    showMyProgress={activeTab === 'joined'}
                   />
                 ))}
               </AnimatePresence>
@@ -446,6 +504,8 @@ export default function Challenges() {
             currentUserId={user.id}
             onClose={() => setSelectedChallenge(null)}
             onJoin={() => handleJoin(selectedChallenge.id)}
+            activities={activities.filter((a) => a.userId === user.id)}
+            onSubmitActivity={submitActivityToChallenge}
           />
         )}
       </AnimatePresence>
@@ -517,12 +577,14 @@ function ChallengeCard({
   userId,
   onOpenDetail,
   onJoin,
+  showMyProgress,
 }: {
   challenge: Challenge;
   index: number;
   userId: string;
   onOpenDetail: () => void;
   onJoin: () => void;
+  showMyProgress?: boolean;
 }) {
   const gradient = typeGradientMap[challenge.type];
   const status = getChallengeStatus(challenge);
@@ -675,6 +737,32 @@ function ChallengeCard({
           </div>
         )}
 
+        {showMyProgress && myParticipant && (
+          <div className="p-3 rounded-xl bg-ink-50 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-ink-500">距离目标</span>
+              <span className="font-semibold text-ink-800">
+                {currentValue >= challenge.target
+                  ? '已达成！'
+                  : `还差 ${(challenge.target - currentValue).toFixed(1)} ${challenge.unit}`}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-ink-500">当前排名</span>
+              <span className="font-semibold text-ink-800 flex items-center gap-1">
+                <Medal className="w-3.5 h-3.5 text-amber-500" />
+                第 {myRank ?? '-'} 名
+              </span>
+            </div>
+            {isOngoing && daysLeft <= 3 && (
+              <div className="flex items-center gap-1.5 text-sm text-orange-600 font-semibold animate-pulse">
+                <Timer className="w-3.5 h-3.5" />
+                即将结束！仅剩 {daysLeft} 天
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-4 border-t border-ink-100">
           <div className="flex items-center gap-2">
             <div className="flex -space-x-2">
@@ -739,37 +827,45 @@ function DetailModal({
   currentUserId,
   onClose,
   onJoin,
+  activities,
+  onSubmitActivity,
 }: {
   challenge: Challenge;
   currentUserId: string;
   onClose: () => void;
   onJoin: () => void;
+  activities: Activity[];
+  onSubmitActivity: (challengeId: string, activityId: string) => void;
 }) {
-  const gradient = typeGradientMap[challenge.type];
-  const status = getChallengeStatus(challenge);
-  const daysLeft = getDaysRemaining(challenge.endDate);
-  const myParticipant = challenge.participants.find((p) => p.userId === currentUserId);
-  const myProgress = myParticipant?.progress ?? challenge.myProgress ?? 0;
-  const myCurrentValue = myParticipant?.currentValue ?? challenge.myCurrentValue ?? 0;
+  const latestChallenge = useStore((s) => s.challenges.find((c) => c.id === challenge.id)) ?? challenge;
+  const [showActivityPanel, setShowActivityPanel] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+
+  const gradient = typeGradientMap[latestChallenge.type];
+  const status = getChallengeStatus(latestChallenge);
+  const daysLeft = getDaysRemaining(latestChallenge.endDate);
+  const myParticipant = latestChallenge.participants.find((p) => p.userId === currentUserId);
+  const myProgress = myParticipant?.progress ?? latestChallenge.myProgress ?? 0;
+  const myCurrentValue = myParticipant?.currentValue ?? latestChallenge.myCurrentValue ?? 0;
   const myRank = myParticipant?.rank;
-  const startDate = new Date(challenge.startDate);
+  const startDate = new Date(latestChallenge.startDate);
   const now = new Date();
   const daysPassed = Math.max(
     1,
-    Math.ceil((Math.min(now.getTime(), new Date(challenge.endDate).getTime()) - startDate.getTime()) / (1000 * 60 * 60 * 24))
+    Math.ceil((Math.min(now.getTime(), new Date(latestChallenge.endDate).getTime()) - startDate.getTime()) / (1000 * 60 * 60 * 24))
   );
 
   const sortedParticipants = useMemo(
-    () => [...challenge.participants].sort((a, b) => b.currentValue - a.currentValue),
-    [challenge.participants]
+    () => [...latestChallenge.participants].sort((a, b) => b.currentValue - a.currentValue),
+    [latestChallenge.participants]
   );
 
   const top3 = sortedParticipants.slice(0, 3);
   const rest = sortedParticipants.slice(3);
 
-  const participantCount = challenge.participants.length;
+  const participantCount = latestChallenge.participants.length;
 
-  const activities = useMemo(() => {
+  const participantActivities = useMemo(() => {
     const result: {
       id: string;
       user: User;
@@ -864,10 +960,10 @@ function DetailModal({
         </button>
 
         <div className={cn('relative h-48 sm:h-56 overflow-hidden bg-gradient-to-br', gradient.bg)}>
-          {challenge.banner && (
+          {latestChallenge.banner && (
             <img
-              src={challenge.banner}
-              alt={challenge.title}
+              src={latestChallenge.banner}
+              alt={latestChallenge.title}
               className="w-full h-full object-cover opacity-45 mix-blend-overlay"
             />
           )}
@@ -902,7 +998,7 @@ function DetailModal({
                   已结束
                 </span>
               )}
-              {challenge.isJoined && (
+              {latestChallenge.isJoined && (
                 <span className="px-3 py-1 rounded-lg text-xs font-bold text-brand-700 bg-white/95 flex items-center gap-1">
                   <CheckCircle className="w-3 h-3" />
                   我已参与
@@ -910,41 +1006,63 @@ function DetailModal({
               )}
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold font-display drop-shadow-sm mb-1">
-              {challenge.title}
+              {latestChallenge.title}
             </h2>
-            <p className="text-white/85 text-sm sm:text-base max-w-2xl">{challenge.description}</p>
+            <p className="text-white/85 text-sm sm:text-base max-w-2xl">{latestChallenge.description}</p>
           </div>
         </div>
 
         <div className="p-6 sm:p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <InfoSection challenge={challenge} gradient={gradient} daysLeft={daysLeft} participantCount={participantCount} />
+              <InfoSection challenge={latestChallenge} gradient={gradient} daysLeft={daysLeft} participantCount={participantCount} />
               <LeaderboardSection
                 top3={top3}
                 rest={rest}
                 currentUserId={currentUserId}
                 gradient={gradient}
-                target={challenge.target}
-                unit={challenge.unit}
+                target={latestChallenge.target}
+                unit={latestChallenge.unit}
               />
-              <ActivityWall activities={activities} />
+              <ActivityWall activities={participantActivities} />
             </div>
 
             <div className="space-y-6">
               <MyProgressCard
-                isJoined={!!challenge.isJoined}
+                isJoined={!!latestChallenge.isJoined}
                 myProgress={myProgress}
                 myCurrentValue={myCurrentValue}
-                target={challenge.target}
-                unit={challenge.unit}
+                target={latestChallenge.target}
+                unit={latestChallenge.unit}
                 myRank={myRank}
                 gradient={gradient}
                 daysPassed={daysPassed}
                 status={status}
                 onJoin={onJoin}
               />
-              <TimelineCard challenge={challenge} />
+              <CheckInCard
+                isJoined={!!latestChallenge.isJoined}
+                challengeType={latestChallenge.type}
+                challengeId={latestChallenge.id}
+                activities={activities}
+                onSubmitActivity={onSubmitActivity}
+                onSubmitSuccess={(msg) => {
+                  setSubmitSuccess(msg);
+                  setTimeout(() => setSubmitSuccess(null), 3000);
+                }}
+              />
+              {submitSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="p-3 rounded-xl bg-green-50 border border-green-200 flex items-center gap-2 text-sm text-green-700 font-medium"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {submitSuccess}
+                </motion.div>
+              )}
+              <TimelineCard challenge={latestChallenge} />
             </div>
           </div>
         </div>
@@ -1309,6 +1427,135 @@ function Top3Card({
           {rank === 1 ? '冠军' : rank === 2 ? '亚军' : '季军'}
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+function CheckInCard({
+  isJoined,
+  challengeType,
+  challengeId,
+  activities,
+  onSubmitActivity,
+  onSubmitSuccess,
+}: {
+  isJoined: boolean;
+  challengeType: ChallengeType;
+  challengeId: string;
+  activities: Activity[];
+  onSubmitActivity: (challengeId: string, activityId: string) => void;
+  onSubmitSuccess: (msg: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const filteredActivities = useMemo(() => {
+    return activities.filter((a) => {
+      if (challengeType === 'distance') return a.type === 'running' || a.type === 'cycling';
+      if (challengeType === 'streak') return a.type === 'running' || a.type === 'cycling';
+      if (challengeType === 'elevation') return a.type === 'cycling';
+      return false;
+    });
+  }, [activities, challengeType]);
+
+  if (!isJoined) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, delay: 0.32 }}
+        className="p-5 rounded-3xl bg-ink-50 border border-ink-100"
+      >
+        <h4 className="flex items-center gap-2 text-sm font-bold text-ink-800 mb-3">
+          <Flame className="w-4 h-4 text-orange-500" />
+          提交运动打卡
+        </h4>
+        <p className="text-sm text-ink-400">参与挑战后即可打卡</p>
+      </motion.div>
+    );
+  }
+
+  const handleSubmit = (activityId: string, activityName: string, contribution: number) => {
+    onSubmitActivity(challengeId, activityId);
+    const unitLabel = challengeType === 'elevation' ? 'm' : 'km';
+    onSubmitSuccess(`打卡成功！提交了 ${contribution.toFixed(1)} ${unitLabel} 运动记录`);
+    setExpanded(false);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4, delay: 0.32 }}
+      className="p-5 rounded-3xl bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 border border-orange-100 space-y-3"
+    >
+      <h4 className="flex items-center gap-2 text-sm font-bold text-ink-800">
+        <Flame className="w-4 h-4 text-orange-500" />
+        提交运动打卡
+      </h4>
+
+      {!expanded ? (
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 text-white text-sm font-semibold shadow-md shadow-orange-500/25 hover:shadow-orange-500/40 transition-all flex items-center justify-center gap-2"
+        >
+          <Flame className="w-4 h-4" />
+          选择运动打卡
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <button
+            onClick={() => setExpanded(false)}
+            className="w-full py-2 rounded-lg bg-ink-50 text-ink-500 text-xs font-medium flex items-center justify-center gap-1 hover:bg-ink-100 transition-colors"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+            收起
+          </button>
+
+          {filteredActivities.length === 0 ? (
+            <p className="text-sm text-ink-400 text-center py-4">暂无匹配的运动记录</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {filteredActivities.map((activity) => {
+                const contribution =
+                  challengeType === 'distance'
+                    ? activity.distance / 1000
+                    : challengeType === 'elevation'
+                      ? activity.elevationGain
+                      : 1;
+                const unitLabel = challengeType === 'elevation' ? 'm' : 'km';
+
+                return (
+                  <div
+                    key={activity.id}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-white border border-amber-100 hover:border-orange-200 transition-colors"
+                  >
+                    <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center">
+                      {activity.type === 'running' ? (
+                        <Footprints className="w-4 h-4 text-orange-600" />
+                      ) : (
+                        <Bike className="w-4 h-4 text-orange-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink-800 truncate">{activity.name}</p>
+                      <p className="text-xs text-ink-400">
+                        {(activity.distance / 1000).toFixed(1)} km · {formatDate(activity.startTime, 'MM月dd日')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleSubmit(activity.id, activity.name, contribution)}
+                      className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-semibold hover:shadow-md transition-all active:scale-95"
+                    >
+                      提交打卡
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
